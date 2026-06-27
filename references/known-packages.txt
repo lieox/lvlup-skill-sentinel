@@ -1,0 +1,24 @@
+# Known-good package names used as the typosquat baseline. One per line.
+# Seed list of widely-used npm + PyPI packages; extend over time.
+requests
+numpy
+pandas
+flask
+django
+fastapi
+pydantic
+anthropic
+openai
+express
+react
+react-dom
+lodash
+axios
+chalk
+commander
+typescript
+eslint
+vite
+next
+dotenv
+zod

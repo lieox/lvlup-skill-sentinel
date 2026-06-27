@@ -1,0 +1,144 @@
+# skill-sentinel source registry
+# The directories skill-sentinel searches, and what each one is good for.
+# Adding/removing a source is a config change here; the active connectors live in
+# scripts/sentinel/sources.py and mirror this file.
+# Verified live 2026-06-19. `access` = how reliably we can read it programmatically.
+#
+# access values:
+#   api        - clean public JSON/REST endpoint, no auth
+#   api_key    - public endpoint but needs a key (optional richer signals)
+#   gh         - read via the authenticated `gh` CLI (GitHub)
+#   scrape     - HTML only, often bot-blocked; avoid for MVP
+#
+# signal_quality: how much the source tells us about SAFETY (not just popularity)
+#   none | popularity | identity | scanned
+
+ecosystems:
+
+  skill:
+    primary:
+      - id: github
+        name: GitHub Search API
+        url: https://api.github.com/search/repositories
+        access: gh
+        signals: [stars, forks, pushed_at, license, owner, archived]
+        signal_quality: popularity
+        topics: [agent-skills, claude-skills, claude-skill, claude-code-skills]
+        notes: The firehose + ground truth for stars/freshness/owner. Always on.
+        enabled: true
+
+      - id: claudemarketplaces
+        name: claudemarketplaces.com
+        url: https://claudemarketplaces.com/api/skills
+        access: api
+        signals: [stars, installs, freshness, categories]
+        signal_quality: popularity
+        notes: Open cross-ecosystem JSON. Large payload - fetch + filter locally, cap results.
+        enabled: true
+
+      - id: claudeskills_info
+        name: claudeskills.info
+        url: https://claudeskills.info/api/skills
+        access: api
+        signals: [stars, forks, downloads, favorites, license, featured, requires_code_execution]
+        signal_quality: identity
+        notes: Exposes a `requires_code_execution` risk flag - a real Tier-1 safety signal.
+        enabled: true
+
+      - id: skills_sh
+        name: skills.sh
+        url: https://skills.sh/api/v1
+        access: api
+        search_path: /search
+        audit_path: /audit/{owner}/{repo}/{skill}
+        signals: [installs, activity, leaderboard, audit]
+        signal_quality: scanned
+        notes: Has an existing audit endpoint - use as a cross-check, never as sole truth.
+        enabled: true
+
+      - id: skillsdirectory
+        name: skillsdirectory.com
+        url: https://skillsdirectory.com/api/skills
+        access: api
+        signals: [verified, inline_skill_md, scan_flaws]
+        signal_quality: scanned
+        notes: Runs a 50+ rule security scan; returns inline SKILL.md. Best safety prior-art.
+        enabled: false   # enable after smoke-testing its schema
+
+  mcp:   # Phase 2
+    primary:
+      - id: mcp_registry
+        name: Official MCP Registry
+        url: https://registry.modelcontextprotocol.io/v0/servers
+        access: api
+        signals: [official_status, updated_since, repo_identity]
+        signal_quality: identity
+        notes: Canonical, no-auth, OpenAPI. Confirmed live. Use ?updated_since= for deltas.
+        enabled: false
+
+      - id: pulsemcp
+        name: PulseMCP
+        url: https://api.pulsemcp.com/v0.1/servers
+        access: api_key
+        signals: [weekly_visitors, official, community, release_date, registry_source]
+        signal_quality: popularity
+        notes: Visitor-popularity + provenance overlay. Needs X-API-Key + X-Tenant-ID.
+        enabled: false
+
+      - id: docker_mcp
+        name: Docker MCP Catalog
+        url: https://hub.docker.com/mcp
+        access: scrape
+        signals: [provenance, signing, versioning]
+        signal_quality: scanned
+        notes: Strongest supply-chain trust (container signing). 300+ verified servers.
+        enabled: false
+
+  plugin:   # Phase 2
+    primary:
+      - id: claude_plugins_official
+        name: anthropics/claude-plugins-official
+        url: https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json
+        access: api
+        signals: [curated, sha_pinned, anthropic_official]
+        signal_quality: scanned
+        notes: Human-curated to a quality+security bar. Highest trust. 233 plugins, many SHA-pinned.
+        enabled: false
+
+      - id: claude_plugins_community
+        name: anthropics/claude-plugins-community
+        url: https://raw.githubusercontent.com/anthropics/claude-plugins-community/main/.claude-plugin/marketplace.json
+        access: api
+        signals: [author_identity, auto_scanned]
+        signal_quality: identity
+        notes: ~2200 plugins, nightly sync, lower bar than official.
+        enabled: false
+
+      - id: claudepluginhub
+        name: claudepluginhub.com
+        url: https://claudepluginhub.com/api/plugins
+        access: api
+        signals: [quality, freshness, safety_rating, stars]
+        signal_quality: scanned
+        notes: Per-plugin safety rating - closest prior art for what we do.
+        enabled: false
+
+  command:   # Phase 2 (commands increasingly fold into skills)
+    primary:
+      - id: awesome_claude_code
+        name: hesreallyhim/awesome-claude-code
+        url: https://raw.githubusercontent.com/hesreallyhim/awesome-claude-code/main/THE_RESOURCES_TABLE.csv
+        access: api
+        signals: [curated_list]
+        signal_quality: identity
+        notes: Structured CSV covers skills, hooks, commands, plugins. Repo mid-reconstruction.
+        enabled: false
+
+# Sources we deliberately DON'T use as trust signals (discovery-only or unreliable):
+deprioritized:
+  - id: github_topics_as_trust
+    reason: self-applied tags, mislabeled - discovery only, never a safety signal
+  - id: skillsmp / skills.sh raw totals
+    reason: 1.7M / 781k scraped, zero curation - volume is not signal
+  - id: mcp.so / smithery / lobehub / mcpmarket
+    reason: aggressive Cloudflare bot-blocking (403/429), redundant coverage
